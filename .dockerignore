@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+enterprise_rag.egg-info/
+.env
+.DS_Store
+*.log
+.git/
+.gitignore
+README.md
+STATUS.md
+what-can-I-say.txt
+tests/

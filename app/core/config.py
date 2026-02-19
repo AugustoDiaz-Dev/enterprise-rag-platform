@@ -12,12 +12,18 @@ class Settings(BaseSettings):
     database_url: str
 
     embedding_provider: str = "hash"  # hash | openai
+
     openai_api_key: str | None = None
 
     # LLM settings
+    llm_provider: str = "openai"          # openai | local  (#11)
     llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1024
+
+    # #11 Local model provider (Ollama)
+    local_model_url: str = "http://localhost:11434"
+    local_model_name: str = "llama3"
 
     # Retrieval settings (#3 Score thresholding)
     # Cosine distance ranges 0–2; lower = more similar.

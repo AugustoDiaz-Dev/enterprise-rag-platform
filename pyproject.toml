@@ -16,6 +16,11 @@ dependencies = [
   "pypdf>=4.3",
   "openai>=1.30",
   "tenacity>=8.3",
+  # #6 OCR fallback for scanned PDFs (system deps already in Dockerfile)
+  "pytesseract>=0.3.10",
+  "pdf2image>=1.17",
+  # #11 Local model provider (Ollama HTTP client)
+  "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

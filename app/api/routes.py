@@ -15,6 +15,10 @@ from app.rag.vector_store import VectorStore
 from app.schemas import (
     DocumentIngestResponse,
     DocumentListResponse,
+    PromptCreate,
+    PromptListResponse,
+    PromptOut,
+    QueryLogOut,
     QueryRequest,
     QueryResponse,
 )
@@ -34,7 +38,7 @@ async def health() -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-#  Documents — ingest (#1 idempotency), list (#4), delete (#5)               #
+#  Documents — ingest (#1), list (#4), delete (#5)                            #
 # --------------------------------------------------------------------------- #
 
 @router.post("/documents", response_model=DocumentIngestResponse, status_code=201)
@@ -51,19 +55,20 @@ async def upload_document(
 
     pdf_bytes = await file.read()
 
-    # #1 Idempotent ingestion — compute SHA-256 and skip if already stored
+    # #1 Idempotent ingestion
     file_hash = hashlib.sha256(pdf_bytes).hexdigest()
     store = VectorStore(session)
     existing_id = await store.find_document_by_hash(file_hash)
     if existing_id is not None:
-        logger.info("document_already_exists", extra={"document_id": str(existing_id), "hash": file_hash})
+        logger.info("document_already_exists", extra={"document_id": str(existing_id)})
         return DocumentIngestResponse(
             document_id=existing_id,
             chunks_ingested=0,
             already_existed=True,
         )
 
-    text = extract_text_from_pdf(pdf_bytes)
+    # #6 OCR fallback is handled transparently inside extract_text_from_pdf
+    text, ocr_used = extract_text_from_pdf(pdf_bytes)
     if not text.strip():
         raise HTTPException(status_code=400, detail="No extractable text found in PDF")
 
@@ -86,14 +91,17 @@ async def upload_document(
     )
     await session.commit()
 
-    logger.info("document_ingested", extra={"document_id": str(doc_id), "chunks": len(chunks)})
-    return DocumentIngestResponse(document_id=doc_id, chunks_ingested=len(chunks), already_existed=False)
+    logger.info("document_ingested", extra={"document_id": str(doc_id), "chunks": len(chunks), "ocr": ocr_used})
+    return DocumentIngestResponse(
+        document_id=doc_id,
+        chunks_ingested=len(chunks),
+        already_existed=False,
+        ocr_used=ocr_used,
+    )
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents(
-    session: AsyncSession = Depends(get_session),
-) -> DocumentListResponse:
+async def list_documents(session: AsyncSession = Depends(get_session)) -> DocumentListResponse:
     """#4 — List all ingested documents with metadata and chunk counts."""
     store = VectorStore(session)
     docs = await store.list_documents()
@@ -127,7 +135,7 @@ async def delete_document(
 
 
 # --------------------------------------------------------------------------- #
-#  Query (#3 score threshold applied inside QueryService)                     #
+#  Query (#3 threshold, #9 filter, #10 debug)                                 #
 # --------------------------------------------------------------------------- #
 
 @router.post("/query", response_model=QueryResponse)
@@ -141,4 +149,111 @@ async def query(
         query=payload.query,
         top_k=payload.top_k,
         score_threshold=payload.score_threshold,
+        document_id=payload.document_id,   # #9
+        debug=payload.debug,               # #10
+    )
+
+
+# --------------------------------------------------------------------------- #
+#  Query logs — #7 token usage history                                        #
+# --------------------------------------------------------------------------- #
+
+@router.get("/query-logs", response_model=list[QueryLogOut])
+async def get_query_logs(
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+) -> list[QueryLogOut]:
+    """#7 — Return the most recent query logs with token usage and cost estimates."""
+    store = VectorStore(session)
+    logs = await store.list_query_logs(limit=limit)
+    return [
+        QueryLogOut(
+            id=log.id,
+            query_text=log.query_text,
+            chunks_used=log.chunks_used,
+            prompt_tokens=log.prompt_tokens,
+            completion_tokens=log.completion_tokens,
+            total_tokens=log.total_tokens,
+            estimated_cost_usd=log.estimated_cost_usd,
+            latency_ms=log.latency_ms,
+            created_at=log.created_at,
+        )
+        for log in logs
+    ]
+
+
+# --------------------------------------------------------------------------- #
+#  Prompt registry — #8 versioned system prompts                              #
+# --------------------------------------------------------------------------- #
+
+@router.post("/prompts", response_model=PromptOut, status_code=201)
+async def create_prompt(
+    payload: PromptCreate,
+    session: AsyncSession = Depends(get_session),
+) -> PromptOut:
+    """#8 — Create a new versioned system prompt."""
+    store = VectorStore(session)
+    prompt = await store.create_prompt(
+        name=payload.name,
+        content=payload.content,
+        author=payload.author,
+    )
+    await session.commit()
+    logger.info("prompt_created", extra={"name": prompt.name, "version": prompt.version})
+    return PromptOut(
+        id=prompt.id,
+        name=prompt.name,
+        version=prompt.version,
+        content=prompt.content,
+        author=prompt.author,
+        is_active=prompt.is_active,
+        created_at=prompt.created_at,
+    )
+
+
+@router.get("/prompts", response_model=PromptListResponse)
+async def list_prompts(
+    name: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> PromptListResponse:
+    """#8 — List all prompt versions (optionally filtered by name)."""
+    store = VectorStore(session)
+    prompts = await store.list_prompts(name=name)
+    return PromptListResponse(
+        prompts=[
+            PromptOut(
+                id=p.id,
+                name=p.name,
+                version=p.version,
+                content=p.content,
+                author=p.author,
+                is_active=p.is_active,
+                created_at=p.created_at,
+            )
+            for p in prompts
+        ],
+        total=len(prompts),
+    )
+
+
+@router.put("/prompts/{prompt_id}/activate", response_model=PromptOut)
+async def activate_prompt(
+    prompt_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> PromptOut:
+    """#8 — Mark a prompt version as active (deactivates all others with the same name)."""
+    store = VectorStore(session)
+    prompt = await store.activate_prompt(prompt_id)
+    if prompt is None:
+        raise HTTPException(status_code=404, detail=f"Prompt {prompt_id} not found")
+    await session.commit()
+    logger.info("prompt_activated", extra={"id": str(prompt.id), "name": prompt.name, "version": prompt.version})
+    return PromptOut(
+        id=prompt.id,
+        name=prompt.name,
+        version=prompt.version,
+        content=prompt.content,
+        author=prompt.author,
+        is_active=prompt.is_active,
+        created_at=prompt.created_at,
     )

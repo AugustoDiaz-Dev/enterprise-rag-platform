@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,8 @@ class RetrievalResult:
     query: str
     chunks: list[RetrievedChunk]
     threshold_applied: float | None
+    query_embedding: list[float] = field(default_factory=list)   # #10 debug
+    document_id: uuid.UUID | None = None                          # #9 filter applied
 
 
 class Retriever:
@@ -27,13 +30,23 @@ class Retriever:
         query: str,
         top_k: int = 5,
         score_threshold: float | None = None,
+        document_id: uuid.UUID | None = None,   # #9 metadata filter
     ) -> RetrievalResult:
-        # Use the per-request override if provided, otherwise fall back to global config
-        threshold = score_threshold if score_threshold is not None else settings.retrieval_score_threshold
+        threshold = (
+            score_threshold if score_threshold is not None
+            else settings.retrieval_score_threshold
+        )
         q_emb = await self._embedder.embed_query(query)
         chunks = await self._store.query(
             query_embedding=q_emb,
             top_k=top_k,
             score_threshold=threshold,
+            document_id=document_id,
         )
-        return RetrievalResult(query=query, chunks=chunks, threshold_applied=threshold)
+        return RetrievalResult(
+            query=query,
+            chunks=chunks,
+            threshold_applied=threshold,
+            query_embedding=q_emb,
+            document_id=document_id,
+        )
