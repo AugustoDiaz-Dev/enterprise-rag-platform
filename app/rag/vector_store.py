@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import Select, delete, func, select
+from dataclasses import fields as dc_fields
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Chunk as ChunkModel
@@ -29,6 +30,18 @@ class DocumentRecord:
     content_type: str
     created_at: datetime
     chunk_count: int
+
+
+@dataclass(frozen=True)
+class ServiceMetrics:
+    """Aggregated service-level stats returned by GET /metrics (#14)."""
+    total_queries: int
+    total_documents: int
+    total_chunks: int
+    avg_latency_ms: float | None
+    total_tokens: int
+    avg_tokens_per_query: float | None
+    total_estimated_cost_usd: float | None
 
 
 class VectorStore:
@@ -257,3 +270,39 @@ class VectorStore:
         if name:
             stmt = stmt.where(SystemPromptModel.name == name)
         return list((await self._session.execute(stmt)).scalars().all())
+
+    # ------------------------------------------------------------------ #
+    #  #14 Service-level metrics                                           #
+    # ------------------------------------------------------------------ #
+
+    async def get_metrics(self) -> ServiceMetrics:
+        """Return aggregate service stats across all query logs, documents, and chunks."""
+        # Query log aggregates
+        log_stmt = select(
+            func.count(QueryLogModel.id).label("total_queries"),
+            func.avg(QueryLogModel.latency_ms).label("avg_latency_ms"),
+            func.sum(QueryLogModel.total_tokens).label("total_tokens"),
+            func.avg(QueryLogModel.total_tokens).label("avg_tokens_per_query"),
+            func.sum(QueryLogModel.estimated_cost_usd).label("total_cost"),
+        )
+        log_row = (await self._session.execute(log_stmt)).one()
+
+        # Document count
+        doc_count: int = (
+            await self._session.execute(select(func.count(DocumentModel.id)))
+        ).scalar_one() or 0
+
+        # Chunk count
+        chunk_count: int = (
+            await self._session.execute(select(func.count(ChunkModel.id)))
+        ).scalar_one() or 0
+
+        return ServiceMetrics(
+            total_queries=int(log_row.total_queries or 0),
+            total_documents=doc_count,
+            total_chunks=chunk_count,
+            avg_latency_ms=round(float(log_row.avg_latency_ms), 2) if log_row.avg_latency_ms else None,
+            total_tokens=int(log_row.total_tokens or 0),
+            avg_tokens_per_query=round(float(log_row.avg_tokens_per_query), 2) if log_row.avg_tokens_per_query else None,
+            total_estimated_cost_usd=round(float(log_row.total_cost), 8) if log_row.total_cost else None,
+        )

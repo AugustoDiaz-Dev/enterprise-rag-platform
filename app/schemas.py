@@ -102,3 +102,16 @@ class PromptOut(BaseModel):
 class PromptListResponse(BaseModel):
     prompts: list[PromptOut]
     total: int
+
+
+# ── #14 Service metrics ───────────────────────────────────────────────────
+
+class ServiceMetricsOut(BaseModel):
+    """Aggregated service-level metrics."""
+    total_queries: int
+    total_documents: int
+    total_chunks: int
+    avg_latency_ms: float | None
+    total_tokens: int
+    avg_tokens_per_query: float | None
+    total_estimated_cost_usd: float | None

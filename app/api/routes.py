@@ -11,6 +11,7 @@ from app.db.session import get_session
 from app.rag.chunker import chunk_text
 from app.rag.embedding import get_embedding_provider
 from app.rag.ingestion import extract_text_from_pdf
+from app.api.deps import get_api_key
 from app.rag.vector_store import VectorStore
 from app.schemas import (
     DocumentIngestResponse,
@@ -21,6 +22,7 @@ from app.schemas import (
     QueryLogOut,
     QueryRequest,
     QueryResponse,
+    ServiceMetricsOut,
 )
 from app.services.query_service import QueryService
 
@@ -38,6 +40,29 @@ async def health() -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
+#  Metrics  #14                                                               #
+# --------------------------------------------------------------------------- #
+
+@router.get("/metrics", response_model=ServiceMetricsOut)
+async def get_metrics(
+    session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
+) -> ServiceMetricsOut:
+    """#14 — Service-level metrics: query count, avg latency, tokens, cost, docs, chunks."""
+    store = VectorStore(session)
+    m = await store.get_metrics()
+    return ServiceMetricsOut(
+        total_queries=m.total_queries,
+        total_documents=m.total_documents,
+        total_chunks=m.total_chunks,
+        avg_latency_ms=m.avg_latency_ms,
+        total_tokens=m.total_tokens,
+        avg_tokens_per_query=m.avg_tokens_per_query,
+        total_estimated_cost_usd=m.total_estimated_cost_usd,
+    )
+
+
+# --------------------------------------------------------------------------- #
 #  Documents — ingest (#1), list (#4), delete (#5)                            #
 # --------------------------------------------------------------------------- #
 
@@ -45,6 +70,7 @@ async def health() -> dict[str, str]:
 async def upload_document(
     session: AsyncSession = Depends(get_session),
     file: UploadFile = File(...),
+    _ = Depends(get_api_key),
 ) -> DocumentIngestResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
@@ -101,7 +127,10 @@ async def upload_document(
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-async def list_documents(session: AsyncSession = Depends(get_session)) -> DocumentListResponse:
+async def list_documents(
+    session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
+) -> DocumentListResponse:
     """#4 — List all ingested documents with metadata and chunk counts."""
     store = VectorStore(session)
     docs = await store.list_documents()
@@ -124,6 +153,7 @@ async def list_documents(session: AsyncSession = Depends(get_session)) -> Docume
 async def delete_document(
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> None:
     """#5 — Delete a document and all its chunks."""
     store = VectorStore(session)
@@ -142,6 +172,7 @@ async def delete_document(
 async def query(
     payload: QueryRequest,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> QueryResponse:
     embedder = get_embedding_provider()
     service = QueryService(session, embedder)
@@ -162,6 +193,7 @@ async def query(
 async def get_query_logs(
     limit: int = 100,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> list[QueryLogOut]:
     """#7 — Return the most recent query logs with token usage and cost estimates."""
     store = VectorStore(session)
@@ -190,6 +222,7 @@ async def get_query_logs(
 async def create_prompt(
     payload: PromptCreate,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> PromptOut:
     """#8 — Create a new versioned system prompt."""
     store = VectorStore(session)
@@ -215,6 +248,7 @@ async def create_prompt(
 async def list_prompts(
     name: str | None = None,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> PromptListResponse:
     """#8 — List all prompt versions (optionally filtered by name)."""
     store = VectorStore(session)
@@ -240,6 +274,7 @@ async def list_prompts(
 async def activate_prompt(
     prompt_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    _ = Depends(get_api_key),
 ) -> PromptOut:
     """#8 — Mark a prompt version as active (deactivates all others with the same name)."""
     store = VectorStore(session)

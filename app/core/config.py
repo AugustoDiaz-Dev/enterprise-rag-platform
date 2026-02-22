@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     log_level: str = "INFO"
 
+    # Security (#20)
+    api_key: str = "your-api-key-here"
+
     database_url: str
 
     embedding_provider: str = "hash"  # hash | openai
@@ -28,7 +31,7 @@ class Settings(BaseSettings):
     # Retrieval settings (#3 Score thresholding)
     # Cosine distance ranges 0–2; lower = more similar.
     # Chunks with distance > this value are filtered out as irrelevant.
-    retrieval_score_threshold: float = 0.40
+    retrieval_score_threshold: float = 0.95
 
 
 settings = Settings()
