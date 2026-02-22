@@ -1,0 +1,156 @@
+[
+    {
+        "id": "gs-001",
+        "question": "What is Retrieval-Augmented Generation (RAG)?",
+        "ground_truth": "RAG is a technique that enhances large language model outputs by retrieving relevant passages from a knowledge base and providing them as context to the model before generating an answer.",
+        "contexts": [
+            "Retrieval-Augmented Generation (RAG) combines a retrieval component with a generative language model. The retriever fetches relevant documents from a knowledge base, which are then used as context for the LLM to produce grounded, factual answers.",
+            "Unlike pure generation, RAG grounds the model's response in real documents, reducing hallucinations and improving factual accuracy."
+        ],
+        "reference_answer": "RAG is an AI architecture that augments a language model's generation process by first retrieving relevant passages from an external knowledge base and then using those passages as context when generating an answer.",
+        "tags": [
+            "definition",
+            "overview"
+        ],
+        "difficulty": "easy"
+    },
+    {
+        "id": "gs-002",
+        "question": "How does pgvector store embeddings in PostgreSQL?",
+        "ground_truth": "pgvector is a PostgreSQL extension that adds a native `vector` data type, allowing embeddings to be stored as columns in regular tables and queried using cosine, L2, or inner-product distance operators.",
+        "contexts": [
+            "pgvector extends PostgreSQL with a `vector` data type. Embeddings are stored as columns (e.g., `embedding vector(1536)`) directly in PostgreSQL tables alongside other metadata.",
+            "Vector similarity search is performed using dedicated operators: `<=>` for cosine distance, `<->` for L2 distance, and `<#>` for negative inner product."
+        ],
+        "reference_answer": "pgvector adds a `vector` data type to PostgreSQL. Embeddings are stored as rows in a table, and similarity search is done using operators like `<=>` (cosine distance) at query time.",
+        "tags": [
+            "database",
+            "pgvector",
+            "embeddings"
+        ],
+        "difficulty": "medium"
+    },
+    {
+        "id": "gs-003",
+        "question": "What chunking strategy does the Enterprise RAG platform use?",
+        "ground_truth": "The platform uses a token-aware, sentence-boundary-respecting chunker that splits text into overlapping windows of approximately 400 tokens with an 80-token overlap, preserving context across chunk boundaries.",
+        "contexts": [
+            "The chunker splits text at sentence boundaries (. ! ?) and accumulates sentences until the estimated token count reaches the max_tokens limit (default 400).",
+            "An overlap of overlap_tokens (default 80) from the previous chunk is prepended to the next, preserving context across boundaries. Token counts are estimated using the GPT-2 heuristic: words × 1.33."
+        ],
+        "reference_answer": "The platform uses a sentence-boundary chunker with a default window of 400 tokens and 80-token overlap. It avoids breaking mid-sentence, which preserves semantic coherence.",
+        "tags": [
+            "chunking",
+            "implementation"
+        ],
+        "difficulty": "medium"
+    },
+    {
+        "id": "gs-004",
+        "question": "How does idempotent document ingestion work?",
+        "ground_truth": "When a PDF is uploaded, a SHA-256 hash of the file bytes is computed. If a document with that hash already exists in the database, the upload returns immediately with `already_existed=true` and skips re-processing.",
+        "contexts": [
+            "On upload, the API computes a SHA-256 digest of the raw PDF bytes and queries the `documents` table for an existing record with that hash.",
+            "If a match is found, ingestion is skipped and the existing document ID is returned with `already_existed=true` and `chunks_ingested=0`."
+        ],
+        "reference_answer": "SHA-256 hashing of the file bytes is used for deduplication. If the hash already exists in the database, the API returns the existing document ID without re-processing.",
+        "tags": [
+            "ingestion",
+            "deduplication"
+        ],
+        "difficulty": "medium"
+    },
+    {
+        "id": "gs-005",
+        "question": "What happens when a scanned PDF with no extractable text is uploaded?",
+        "ground_truth": "The system falls back to OCR using Tesseract via the `pytesseract` and `pdf2image` libraries. The PDF pages are rendered as images and OCR is performed to extract text. The response includes `ocr_used=true`.",
+        "contexts": [
+            "When `pypdf` extracts an empty string from a PDF, `extract_text_from_pdf` falls back to converting pages to images using `pdf2image` and running `pytesseract` OCR on each page.",
+            "The function returns a tuple of (text, ocr_used). The `ocr_used` boolean is propagated to the API response."
+        ],
+        "reference_answer": "The system detects that no text was extracted and automatically uses OCR (Tesseract + pdf2image) to extract text from the page images. The API response will contain `ocr_used: true`.",
+        "tags": [
+            "OCR",
+            "ingestion",
+            "scanned-pdf"
+        ],
+        "difficulty": "hard"
+    },
+    {
+        "id": "gs-006",
+        "question": "How can I restrict a query to only search a specific document?",
+        "ground_truth": "Pass a `document_id` UUID in the query request payload. The retriever will filter the pgvector similarity search to only consider chunks belonging to that document.",
+        "contexts": [
+            "The `QueryRequest` schema includes an optional `document_id` field (UUID). When set, it is forwarded to the `VectorStore.query()` method as a WHERE clause filter on `chunks.document_id`.",
+            "This is the metadata filtering feature (#9), allowing scoped retrieval within a single ingested document."
+        ],
+        "reference_answer": "Set the `document_id` field in the POST /query body to the UUID of the document you want to search. The retriever will scope the cosine similarity search to chunks from that document only.",
+        "tags": [
+            "retrieval",
+            "metadata-filter"
+        ],
+        "difficulty": "easy"
+    },
+    {
+        "id": "gs-007",
+        "question": "How does the prompt versioning registry work?",
+        "ground_truth": "System prompts are stored in the `system_prompts` table with auto-incrementing version numbers per name. One prompt per name can be marked active. The active prompt is used for all queries by default.",
+        "contexts": [
+            "POST /prompts creates a new system prompt version. The version number auto-increments per prompt name.",
+            "PUT /prompts/{id}/activate marks one version as active and deactivates all others with the same name. The QueryService loads the active prompt at query time."
+        ],
+        "reference_answer": "Create prompt versions via POST /prompts. Promote a specific version via PUT /prompts/{id}/activate. The active version is automatically used for all subsequent queries.",
+        "tags": [
+            "prompts",
+            "versioning"
+        ],
+        "difficulty": "medium"
+    },
+    {
+        "id": "gs-008",
+        "question": "How is token usage tracked and what cost estimation is provided?",
+        "ground_truth": "Each query records prompt_tokens, completion_tokens, and total_tokens returned by the LLM. For OpenAI, cost is estimated using GPT-4o-mini pricing ($0.15/1M input, $0.60/1M output). All logs are queryable via GET /query-logs.",
+        "contexts": [
+            "The QueryService records prompt/completion/total token counts from the LLM response and persists them to the `query_logs` table via `VectorStore.log_query()`.",
+            "Cost estimation uses GPT-4o-mini pricing: $0.15 per 1M prompt tokens and $0.60 per 1M completion tokens. These values are only computed when `llm_provider=openai`."
+        ],
+        "reference_answer": "Token counts are logged per query to the `query_logs` table. For OpenAI, an estimated cost in USD is computed. All historical logs are accessible via GET /query-logs.",
+        "tags": [
+            "tokens",
+            "cost",
+            "observability"
+        ],
+        "difficulty": "medium"
+    },
+    {
+        "id": "gs-009",
+        "question": "What does the debug mode return in a query response?",
+        "ground_truth": "When `debug=true` is set in the request, the response includes a `debug_info` object with the query embedding dimension and norm, the score threshold applied, document filter used, chunk count before and after thresholding, and per-chunk cosine distances.",
+        "contexts": [
+            "Setting `debug=true` in the QueryRequest triggers population of the `debug_info` field in the response.",
+            "debug_info includes: embedding_dim, embedding_norm, threshold_applied, document_filter, chunks_before_threshold, chunks_after_threshold, and per_chunk_scores (chunk_id, chunk_index, distance, similarity)."
+        ],
+        "reference_answer": "Set `\"debug\": true` in the POST /query body. The response will include a `debug_info` field with embedding stats, the score threshold, and per-chunk similarity scores.",
+        "tags": [
+            "debug",
+            "retrieval"
+        ],
+        "difficulty": "easy"
+    },
+    {
+        "id": "gs-010",
+        "question": "How do I switch the LLM provider from OpenAI to a local Ollama model?",
+        "ground_truth": "Set `LLM_PROVIDER=local` in the `.env` file (or environment). Optionally set `LOCAL_MODEL_NAME` and `LOCAL_MODEL_URL`. Ensure Ollama is running and the model is pulled with `ollama pull <model>`.",
+        "contexts": [
+            "The `_make_llm()` factory in QueryService checks `settings.llm_provider`. If it equals `local`, it instantiates `LocalModelProvider` using `settings.local_model_name` and `settings.local_model_url`.",
+            "LocalModelProvider calls the Ollama HTTP API at `/api/chat`. Default base URL is `http://localhost:11434` and default model is `llama3`."
+        ],
+        "reference_answer": "Set `LLM_PROVIDER=local` in your .env. Make sure Ollama is running (`ollama serve`) and the target model is available (`ollama pull llama3`). Optionally override `LOCAL_MODEL_NAME` and `LOCAL_MODEL_URL`.",
+        "tags": [
+            "ollama",
+            "local-llm",
+            "configuration"
+        ],
+        "difficulty": "medium"
+    }
+]
