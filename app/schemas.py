@@ -51,6 +51,14 @@ class RetrievedChunkOut(BaseModel):
     text: str
 
 
+class Citation(BaseModel):
+    label: str
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    chunk_index: int
+    text: str
+
+
 class QueryResponse(BaseModel):
     query: str
     answer: str
@@ -65,6 +73,7 @@ class QueryResponse(BaseModel):
     latency_ms: int = 0
     # #10 Debug info (only populated when debug=True)
     debug_info: dict[str, Any] | None = None
+    citations: list[Citation] = Field(default_factory=list)
 
 
 # ── #7 Query logs ─────────────────────────────────────────────────────────

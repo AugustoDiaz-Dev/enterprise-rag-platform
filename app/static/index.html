@@ -218,6 +218,37 @@
             border: 1px solid var(--glass-border);
         }
 
+        .citations {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .citation {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 0.4rem 0.6rem;
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+        }
+
+        .citation-label {
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .citation-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            white-space: pre-line;
+        }
+
         .chat-input {
             margin-top: 1rem;
             display: flex;
@@ -372,12 +403,18 @@
         <div v-if="currentPane === 'chat'" class="pane section-card">
             <div class="chat-container">
                 <div class="messages" ref="messages">
-                    <div v-for="msg in chatHistory" :class="['message', msg.role]">
-                        {{ msg.text }}
-                        <div v-if="msg.debug" style="font-size: 0.7rem; margin-top: 0.5rem; opacity: 0.5">
-                            Retrieved from {{ msg.debug.chunks }} chunks
+                <div v-for="msg in chatHistory" :class="['message', msg.role]">
+                    {{ msg.text }}
+                    <div v-if="msg.citations?.length" class="citations">
+                        <div v-for="cite in msg.citations" :key="cite.chunk_id" class="citation">
+                            <div class="citation-label">{{ cite.label }}</div>
+                            <div class="citation-text">{{ cite.text }}</div>
                         </div>
                     </div>
+                    <div v-if="msg.debug" style="font-size: 0.7rem; margin-top: 0.5rem; opacity: 0.5">
+                        Retrieved from {{ msg.debug.chunks }} chunks
+                    </div>
+                </div>
                 </div>
                 <div class="chat-input">
                     <input type="text" v-model="query" @keyup.enter="sendQuery" placeholder="Ask anything about your documents...">
@@ -400,7 +437,7 @@
                 const apiKey = ref(localStorage.getItem('rag_api_key') || '');
                 const metrics = ref({});
                 const documents = ref([]);
-                const chatHistory = ref([{ role: 'ai', text: 'Hello! Upload some documents and I can answer questions about them.' }]);
+                const chatHistory = ref([{ role: 'ai', text: 'Hello! Upload some documents and I can answer questions about them.', citations: [] }]);
                 const query = ref('');
                 const loadingQuery = ref(false);
                 const uploading = ref(false);
@@ -478,7 +515,8 @@
                         chatHistory.value.push({ 
                             role: 'ai', 
                             text: data.answer,
-                            debug: { chunks: data.chunks_retrieved }
+                            debug: { chunks: data.chunks_retrieved },
+                            citations: data.citations ?? [],
                         });
                     } catch (e) { 
                         chatHistory.value.push({ role: 'ai', text: 'Sorry, I encountered an error.' });

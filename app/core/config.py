@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Security (#20)
-    api_key: str = "your-api-key-here"
+    api_key: str = "rag-admin-secret"
 
     database_url: str
 

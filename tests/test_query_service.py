@@ -77,6 +77,9 @@ async def test_query_returns_query_response() -> None:
     assert response.prompt_tokens == 100
     assert response.completion_tokens == 50
     assert response.total_tokens == 150
+    assert len(response.citations) == 2
+    assert response.citations[0].label == "[Passage 1]"
+    assert response.citations[0].chunk_id == chunks[0].chunk_id
 
 
 @pytest.mark.asyncio
@@ -109,6 +112,7 @@ async def test_query_no_chunks_returns_fallback_message() -> None:
 
     assert response.chunks_retrieved == 0
     assert "No relevant information" in response.answer
+    assert response.citations == []
 
 
 @pytest.mark.asyncio
@@ -143,9 +147,10 @@ async def test_query_debug_mode_populates_debug_info() -> None:
 
         from app.services.query_service import QueryService
         svc = QueryService(session, embedder)
-        response = await svc.query(query="debug?", top_k=5, debug=True)
+    response = await svc.query(query="debug?", top_k=5, debug=True)
 
     assert response.debug_info is not None
     assert "embedding_dim" in response.debug_info
     assert "per_chunk_scores" in response.debug_info
     assert response.debug_info["embedding_dim"] == 1536
+    assert len(response.citations) == 1
