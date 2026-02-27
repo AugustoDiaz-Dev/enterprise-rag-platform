@@ -12,7 +12,7 @@ from app.llm.base import BaseLLM
 from app.rag.embedding import EmbeddingProvider
 from app.rag.retriever import Retriever
 from app.rag.vector_store import VectorStore
-from app.schemas import QueryResponse, RetrievedChunkOut
+from app.schemas import Citation, QueryResponse, RetrievedChunkOut
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,18 @@ using ONLY the context passages provided below. Follow these rules:
 2. If the context does not contain enough information to answer, say so clearly.
 3. Be concise, accurate, and well-structured.
 4. Respond in the same language as the user's question.
+5. When citing evidence, reference passages using the exact labels shown (e.g., [Passage 1]). End your response with a "Sources: [Passage X]" sentence that lists the passages you relied on.
 """
+
+
+def _format_citation_text(text: str, *, max_len: int = 400) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= max_len:
+        return cleaned
+    truncated = cleaned[:max_len]
+    if " " in truncated:
+        truncated = truncated[: truncated.rfind(" ")]
+    return truncated.rstrip() + "…"
 
 # GPT-4o-mini pricing (per 1M tokens, as of 2024)
 _COST_PER_1M_INPUT = 0.15
@@ -150,6 +161,17 @@ class QueryService:
                 ),
             }
 
+        citations = [
+            Citation(
+                label=f"[Passage {i + 1}]",
+                chunk_id=c.chunk_id,
+                document_id=c.document_id,
+                chunk_index=c.chunk_index,
+                text=_format_citation_text(c.text),
+            )
+            for i, c in enumerate(result.chunks)
+        ]
+
         return QueryResponse(
             query=result.query,
             answer=answer,
@@ -171,4 +193,5 @@ class QueryService:
             estimated_cost_usd=estimated_cost,
             latency_ms=latency_ms,
             debug_info=debug_info,
+            citations=citations,
         )

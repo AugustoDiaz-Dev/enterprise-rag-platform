@@ -12,6 +12,7 @@ Upload PDF documents, chunk and embed them into a vector store, then query the k
 - ⚡ **Async FastAPI** — Fully async stack with SQLAlchemy asyncio
 - 🐘 **PostgreSQL + pgvector** — Persistent vector storage with no external vector DB required
 - 🐳 **Docker-ready** — One command to spin up the database
+- 🧾 **Source citations** — Responses reference `[Passage N]` labels, and the API exposes a `citations` array so the UI can link back to the retrieved evidence.
 
 ## Tech Stack
 
@@ -45,6 +46,8 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
+The `pyproject.toml` now uses `tool.setuptools.packages.find`, so the editable install succeeds even with the multi-package layout (`app/`, `eval/`, `datasets/`).
+
 ### 3. Configure environment variables
 
 ```bash
@@ -59,6 +62,23 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 The interactive docs will be available at **http://localhost:8000/docs**
+
+### Ports
+
+- `8000` — FastAPI API + Vue dashboard (`/api` routes + `/dashboard` static SPA)
+- `5433` — PostgreSQL + pgvector (mapped from Docker service `postgres`)
+
+### Sample demo asset
+
+A representative PDF is bundled at `demo/sample-enterprise-rag.pdf`. Upload it once you've started the API (and `docker compose up -d` for Postgres) to see ingestion, chunking, citations, and the dashboard chat in action:
+
+```bash
+curl -X POST "http://localhost:8000/api/documents" \
+  -H "X-API-Key: rag-admin-secret" \
+  -F "file=@demo/sample-enterprise-rag.pdf"
+```
+
+Use the same API key (`X-API-Key: rag-admin-secret`) for all protected endpoints such as `/api/query`, `/api/metrics`, and `/api/prompts`.
 
 ## API Endpoints
 
